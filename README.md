@@ -27,4 +27,5 @@ claude plugin install token-hearts --marketplace rimiwatworks/token-hearts
 ## つかいかた
 
 - 横にパネル「♥ Tokens」が出ます。出ないときは `/tokens`
-- ステータスラインにも `♥♥♥❥♡ 62% left` のように表示されます
+- 「-CHAT-」はこのチャットの残り、「-ACCOUNT-」はアカウント全体（5時間・7日の利用上限）の残り
+- ステータスラインにも `chat ♥♥♥♥❥ 90% · 5h ♥♥♥❥♡ 62%` のように表示されます
