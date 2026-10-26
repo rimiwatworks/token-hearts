@@ -1,5 +1,5 @@
 {
   "name": "token-hearts",
   "owner": { "name": "rimiwatworks" },
-  "plugins": [{ "name": "token-hearts", "source": "./", "version": "0.2.0", "description": "Remaining tokens (chat and account) as 8-bit Zelda-style hearts" }]
+  "plugins": [{ "name": "token-hearts", "source": "./", "version": "0.2.1", "description": "Remaining tokens (chat and account) as 8-bit Zelda-style hearts" }]
 }

@@ -1,1 +1,1 @@
-{ "name": "token-hearts", "version": "0.2.0", "description": "Remaining tokens as 8-bit Zelda-style hearts in a pixel-art pane", "types": "./types/index.d.ts" }
+{ "name": "token-hearts", "version": "0.2.1", "description": "Remaining tokens as 8-bit Zelda-style hearts in a pixel-art pane", "types": "./types/index.d.ts" }

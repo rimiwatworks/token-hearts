@@ -20,8 +20,8 @@ const HEARTS = 8
 type Px = string | null
 type Canvas = Px[][]
 
-// 7x6 heart on an 8px stride; each text cell holds 2x2 pixels, so 8 hearts take 32 columns
-const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...']
+// 5x4 heart on a 6px stride: 8 hearts take 47 columns
+const HEART = ['XX.XX', 'XXXXX', '.XXX.', '..X..']
 
 const FONT: Record<string, string[]> = {
   T: ['XXX', '.X.', '.X.', '.X.', '.X.'],
@@ -31,9 +31,6 @@ const FONT: Record<string, string[]> = {
   N: ['XX.', 'X.X', 'X.X', 'X.X', 'X.X'],
   S: ['XXX', 'X..', 'XXX', '..X', 'XXX'],
 }
-
-// quadrant glyphs by bits: top-left 1, top-right 2, bottom-left 4, bottom-right 8
-const QUAD = ' ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█'
 
 const blank = (w: number, h: number): Canvas =>
   Array.from({ length: h }, () => Array<Px>(w).fill(null))
@@ -50,10 +47,10 @@ const stamp = (c: Canvas, art: string[], x: number, y: number, paint: (col: numb
     }),
   )
 
-// halves: 0 empty, 1 half, 2 full; a half heart splits on a cell edge so no cell mixes two colors
+// halves: 0 empty, 1 half, 2 full
 const heartRow = (halves: number[]): Canvas => {
-  const c = blank(halves.length * 8, HEART.length)
-  halves.forEach((h, i) => stamp(c, HEART, i * 8, 0, col => (h === 2 || (h === 1 && col < 4) ? RED : EMPTY)))
+  const c = blank(halves.length * 6 - 1, HEART.length)
+  halves.forEach((h, i) => stamp(c, HEART, i * 6, 0, col => (h === 2 || (h === 1 && col < 3) ? RED : EMPTY)))
   return c
 }
 
@@ -92,10 +89,19 @@ const pctLeft = (used: number) => Math.round((100 - used) * 10) / 10
 
 async function refresh($: EngineInterface) {
   const u = await $.session.usage()
+  let { tokens, percent } = u.context
+  // before the first reply there is no reading yet: estimate locally, as /context does
+  if (tokens === undefined) {
+    const b = (await $.session.usage({ breakdown: 'summary' })).context.breakdown
+    if (b) {
+      tokens = b.totalTokens
+      percent = Math.round((b.totalTokens / u.context.window) * 100)
+    }
+  }
   const r: Reading = {
-    tokens: u.context.tokens,
+    tokens,
     window: u.context.window,
-    percent: u.context.percent,
+    percent,
     limits: u.rateLimits.map(l => ({ kind: l.kind, percentUsed: l.percentUsed, resetsAt: l.resetsAt })),
     usd: u.cost?.usd,
   }
@@ -131,8 +137,10 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const r = await read($, reading)
     const cols = e.props.bodyColumns ?? 60
+    // the app surfaces draw hearts at caption size so 8 fit in one row; the terminal has one size
+    const small = e.surface !== 'terminal'
 
-    const row = (key: string, segs: { ch: string; fg: string; bg: string }[]) => {
+    const row = (key: string, segs: { ch: string; fg: string; bg: string }[], isSmall = false) => {
       const runs: { text: string; fg: string; bg: string }[] = []
       segs.forEach(s => {
         const last = runs[runs.length - 1]
@@ -142,7 +150,7 @@ export const register: Register = on => {
       return (
         <Box key={key} flexDirection="row">
           {runs.map(s => (
-            <Text mono color={s.fg} backgroundColor={s.bg}>
+            <Text mono color={s.fg} backgroundColor={s.bg} size={isSmall ? 'caption' : undefined}>
               {s.text}
             </Text>
           ))}
@@ -151,30 +159,22 @@ export const register: Register = on => {
     }
 
     // one cell = 1 pixel wide, 2 tall
-    const drawHalf = (c: Canvas, key: string) => {
+    const drawHalf = (c: Canvas, key: string, isSmall = false) => {
       const rows = []
       for (let y = 0; y < c.length; y += 2)
-        rows.push(row(`${key}-${y}`, c[y].map((px, x) => ({ ch: '▀', fg: px ?? BG, bg: c[y + 1]?.[x] ?? BG }))))
+        rows.push(
+          row(`${key}-${y}`, c[y].map((px, x) => ({ ch: '▀', fg: px ?? BG, bg: c[y + 1]?.[x] ?? BG })), isSmall),
+        )
       return rows
     }
 
-    // one cell = 2x2 pixels, one color plus black
-    const drawQuad = (c: Canvas, key: string) => {
-      const rows = []
-      for (let y = 0; y < c.length; y += 2) {
-        const segs = []
-        for (let x = 0; x < c[y].length; x += 2) {
-          const px = [c[y][x], c[y][x + 1], c[y + 1]?.[x], c[y + 1]?.[x + 1]]
-          const fg = px.find(p => p) ?? BG
-          const bits = px.reduce((b, p, i) => (p === fg ? b | (1 << i) : b), 0)
-          segs.push({ ch: QUAD[bits], fg, bg: BG })
-        }
-        rows.push(row(`${key}-${y}`, segs))
-      }
-      return rows
+    // a narrow terminal takes two rows of 4
+    const hearts = (pct: number, key: string) => {
+      const halves = toHalves(pct, HEARTS)
+      return !small && cols < halves.length * 6 - 1
+        ? [...drawHalf(heartRow(halves.slice(0, 4)), `${key}a`), ...drawHalf(heartRow(halves.slice(4)), `${key}b`)]
+        : drawHalf(heartRow(halves), key, small)
     }
-
-    const hearts = (pct: number, key: string) => drawQuad(heartRow(toHalves(pct, HEARTS)), key)
 
     const txt = (s: string, color = ORANGE) => (
       <Text mono color={color} backgroundColor={BG} weight="bold">
